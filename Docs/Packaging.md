@@ -1,6 +1,6 @@
 # Packaging
 
-`scripts/build-app.sh` assembles a standard macOS bundle using SwiftPM release output. `scripts/build-dmg.sh` ad-hoc signs the nested code and app bundle, verifies their structure, and creates the DMG.
+`scripts/build-app.sh` assembles a standard macOS bundle using SwiftPM release output. `scripts/build-dmg.sh` ad-hoc signs the nested code and app bundle, verifies their structure, and creates a conventional drag-to-install DMG containing the app and an `Applications` shortcut.
 
 The scripts use `CFBundleShortVersionString` from `Resources/Info.plist` for local builds. A release workflow derives `VERSION` from its `v1.2.3` tag, sets the numeric `BUILD_NUMBER` from the workflow run number, and applies both values to the packaged app. The resulting disk image is named `ZvecStudio-1.2.3-arm64.dmg`.
 
