@@ -1,0 +1,15 @@
+{
+  "originHash" : "ead29ec1daf48c8ca7bd0d59bc65ad186fd49efca7c4dbb9eeebd822d931aed6",
+  "pins" : [
+    {
+      "identity" : "zvec-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lurenyang418/zvec-swift.git",
+      "state" : {
+        "revision" : "8eb883dc701ffa1da7ca3c64303367a4d268867f",
+        "version" : "0.5.1"
+      }
+    }
+  ],
+  "version" : 3
+}

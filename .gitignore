@@ -1,0 +1,60 @@
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.pins
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+
+# Xcode-generated user and build data
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+*.ipa
+
+# Distribution and generated application artifacts
+dist/
+*.app
+*.dmg
+
+# Test and coverage output
+.coverage/
+coverage/
+*.profdata
+*.profraw
+*.resultbundle
+
+# Local editor state
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+
+# Local environment and signing credentials
+.env
+.env.*
+!.env.example
+*.cer
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile

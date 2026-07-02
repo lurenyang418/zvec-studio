@@ -1,0 +1,13 @@
+{
+  "indentation": {
+    "spaces": 4
+  },
+  "lineLength": 120,
+  "respectsExistingLineBreaks": true,
+  "rules": {
+    "AlwaysUseLowerCamelCase": false,
+    "ReplaceForEachWithForLoop": false,
+    "UseLetInEveryBoundCaseVariable": false
+  },
+  "version": 1
+}

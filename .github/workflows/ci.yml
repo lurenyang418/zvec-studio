@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  swiftpm:
+    runs-on: macos-15
+    steps:
+      - name: Checkout Studio
+        uses: actions/checkout@v7
+        with:
+          path: zvec-studio
+      - name: Check formatting
+        working-directory: zvec-studio
+        run: xcrun swift-format lint --recursive --strict --configuration .swift-format Sources Tests Package.swift
+      - name: Test
+        working-directory: zvec-studio
+        run: swift test
+      - name: Assemble and ad-hoc sign DMG
+        working-directory: zvec-studio
+        run: scripts/build-dmg.sh
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZvecStudio-arm64
+          path: zvec-studio/dist/ZvecStudio-*-arm64.dmg
+          if-no-files-found: error
