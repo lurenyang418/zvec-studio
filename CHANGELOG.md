@@ -8,4 +8,8 @@ All notable changes to this project will be documented in this file. The format 
 
 - Native macOS collection lifecycle, schema, index, document, browse, and query management.
 - Canonical JSON and RFC 4180 CSV import/export workflows.
-- SwiftPM development, test, Developer ID signing, notarization, and DMG packaging automation.
+- SwiftPM development, test, ad-hoc DMG packaging, and GitHub release automation.
+
+### Changed
+
+- Improved collection tab spacing and redesigned the Overview and Schema layouts for clearer scanning.

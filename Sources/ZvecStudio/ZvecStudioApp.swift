@@ -250,6 +250,7 @@ struct BrowseView: View {
         } message: {
             Text(exportError ?? "")
         }
+        .padding(.top, 12)
     }
 
     private func run() {
@@ -303,47 +304,139 @@ struct OverviewView: View {
     let snapshot: CollectionSnapshot?
     @State private var showingDestroy = false
     @State private var confirmationName = ""
+
     var body: some View {
-        Form {
-            LabeledContent("Location", value: snapshot?.id.rawValue ?? "—")
-            LabeledContent("Documents", value: snapshot.map { String($0.statistics.documentCount) } ?? "—")
-            LabeledContent(
-                "Memory mapping", value: snapshot?.options.enableMemoryMapping == true ? "Enabled" : "Disabled")
-            LabeledContent("Read only", value: snapshot?.options.readOnly == true ? "Yes" : "No")
-            if let indexes = snapshot?.statistics.indexStatistics, !indexes.isEmpty {
-                Section("Index completeness") {
-                    ForEach(indexes, id: \.name) { index in
-                        LabeledContent(
-                            index.name, value: index.completeness.formatted(.percent.precision(.fractionLength(1))))
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Overview")
+                        .font(.title2.bold())
+                    Text("Collection status and storage configuration")
+                        .foregroundStyle(.secondary)
                 }
-            }
-            Section("Danger Zone") {
-                Button("Destroy Collection…", role: .destructive) { showingDestroy = true }
-            }
-        }.padding()
-            .sheet(isPresented: $showingDestroy) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Destroy Collection").font(.title2).bold()
-                    Text("This permanently removes all collection data at:")
-                    Text(id.rawValue).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                    Text("Type **\(snapshot?.schema.name ?? "")** to confirm.")
-                    TextField("Collection name", text: $confirmationName)
-                    HStack {
-                        Spacer()
-                        Button("Cancel") { showingDestroy = false }
-                        Button("Destroy", role: .destructive) {
-                            Task {
-                                await model.destroy(id, confirmationName: confirmationName)
-                                showingDestroy = false
+
+                GroupBox {
+                    Grid(alignment: .leading, horizontalSpacing: 32, verticalSpacing: 12) {
+                        overviewRow("Location") {
+                            Text(snapshot?.id.rawValue ?? "—")
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                                .help(snapshot?.id.rawValue ?? "")
+                        }
+                        overviewRow("Documents") {
+                            Text(snapshot.map { $0.statistics.documentCount.formatted() } ?? "—")
+                                .monospacedDigit()
+                        }
+                        overviewRow("Memory mapping") {
+                            statusLabel(
+                                snapshot?.options.enableMemoryMapping == true ? "Enabled" : "Disabled",
+                                enabled: snapshot?.options.enableMemoryMapping == true
+                            )
+                        }
+                        overviewRow("Access") {
+                            statusLabel(
+                                snapshot?.options.readOnly == true ? "Read only" : "Read and write",
+                                enabled: snapshot?.options.readOnly != true
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                } label: {
+                    Label("Collection", systemImage: "cylinder")
+                        .font(.headline)
+                }
+
+                if let indexes = snapshot?.statistics.indexStatistics, !indexes.isEmpty {
+                    GroupBox {
+                        VStack(spacing: 0) {
+                            ForEach(Array(indexes.enumerated()), id: \.element.name) { offset, index in
+                                HStack(spacing: 16) {
+                                    Text(index.name)
+                                        .fontWeight(.medium)
+                                    Spacer()
+                                    ProgressView(value: Double(index.completeness))
+                                        .frame(width: 160)
+                                    Text(index.completeness.formatted(.percent.precision(.fractionLength(1))))
+                                        .monospacedDigit()
+                                        .frame(width: 64, alignment: .trailing)
+                                }
+                                .padding(.vertical, 10)
+                                if offset < indexes.count - 1 { Divider() }
                             }
                         }
-                        .disabled(confirmationName != snapshot?.schema.name)
+                        .padding(.horizontal, 8)
+                    } label: {
+                        Label("Index completeness", systemImage: "chart.bar.fill")
+                            .font(.headline)
                     }
                 }
-                .padding(20)
-                .frame(width: 580)
+
+                GroupBox {
+                    HStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Permanently delete this collection")
+                                .fontWeight(.medium)
+                            Text("This removes all collection data and cannot be undone.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Destroy Collection…", role: .destructive) { showingDestroy = true }
+                    }
+                    .padding(8)
+                } label: {
+                    Label("Danger Zone", systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                }
             }
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .sheet(isPresented: $showingDestroy) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Destroy Collection").font(.title2).bold()
+                Text("This permanently removes all collection data at:")
+                Text(id.rawValue).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                Text("Type **\(snapshot?.schema.name ?? "")** to confirm.")
+                TextField("Collection name", text: $confirmationName)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showingDestroy = false }
+                    Button("Destroy", role: .destructive) {
+                        Task {
+                            await model.destroy(id, confirmationName: confirmationName)
+                            showingDestroy = false
+                        }
+                    }
+                    .disabled(confirmationName != snapshot?.schema.name)
+                }
+            }
+            .padding(20)
+            .frame(width: 580)
+        }
+    }
+
+    private func overviewRow<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        GridRow {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+            content()
+                .gridColumnAlignment(.leading)
+        }
+    }
+
+    private func statusLabel(_ text: String, enabled: Bool) -> some View {
+        Label(text, systemImage: enabled ? "checkmark.circle.fill" : "minus.circle")
+            .foregroundStyle(enabled ? .green : .secondary)
     }
 }
 
@@ -357,44 +450,79 @@ struct SchemaView: View {
     @State private var dropField: FieldSchema?
     @State private var dropIndexField: FieldSchema?
 
+    private var fields: [FieldSchema] { snapshot?.schema.fields ?? [] }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Schema").font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Schema")
+                        .font(.title2.bold())
+                    Text("\(fields.count) column\(fields.count == 1 ? "" : "s")")
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Add Column", systemImage: "plus") { showingAdd = true }
             }
-            .padding()
-            List(snapshot?.schema.fields ?? [], id: \.name) { field in
-                HStack {
-                    Grid(alignment: .leading, horizontalSpacing: 16) {
-                        GridRow {
-                            Text(field.name).font(.headline).gridColumnAlignment(.leading)
-                            Text(String(describing: field.dataType)).gridColumnAlignment(.leading)
-                            Text(field.nullable ? "Nullable" : "Required")
-                            Text(field.dimensions == 0 ? "" : "\(field.dimensions) dimensions")
-                        }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+
+            Divider()
+
+            if fields.isEmpty {
+                ContentUnavailableView(
+                    "No Columns",
+                    systemImage: "rectangle.split.3x1",
+                    description: Text("Add a column to define this collection's schema.")
+                )
+            } else {
+                Table(fields) {
+                    TableColumn("Name") { field in
+                        Text(field.name)
+                            .fontWeight(.semibold)
+                            .textSelection(.enabled)
+                    }
+                    .width(min: 140, ideal: 180, max: 260)
+
+                    TableColumn("Type") { field in
+                        Text(field.dataType.schemaDisplayName)
+                    }
+                    .width(min: 120, ideal: 150, max: 200)
+
+                    TableColumn("Requirement") { field in
+                        Text(field.nullable ? "Nullable" : "Required")
+                            .foregroundStyle(field.nullable ? .secondary : .primary)
+                    }
+                    .width(min: 90, ideal: 100, max: 120)
+
+                    TableColumn("Dimensions") { field in
+                        Text(field.dimensions == 0 ? "—" : field.dimensions.formatted())
+                            .monospacedDigit()
+                    }
+                    .width(min: 80, ideal: 90, max: 110)
+
+                    TableColumn("Index") { field in
                         if let index = field.index {
-                            GridRow {
-                                Text("Index").foregroundStyle(.secondary);
-                                Text(String(describing: index)).gridCellColumns(3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Label(index.schemaDisplayName, systemImage: "bolt.horizontal.circle.fill")
+                                    .fontWeight(.medium)
+                                Text(index.schemaDisplayDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
-                        }
-                    }
-                    Spacer()
-                    Menu {
-                        Button("Alter Column…") { editingField = field }
-                        if field.index == nil {
-                            Button("Create Index…") { indexingField = field }
+                            .help(index.schemaDisplayDescription)
                         } else {
-                            Button("Drop Index…", role: .destructive) { dropIndexField = field }
+                            Text("None")
+                                .foregroundStyle(.tertiary)
                         }
-                        Divider()
-                        Button("Drop Column…", role: .destructive) { dropField = field }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
                     }
-                    .menuStyle(.borderlessButton)
+                    .width(min: 160, ideal: 240, max: 380)
+
+                    TableColumn("") { field in
+                        fieldActions(field)
+                    }
+                    .width(36)
                 }
             }
         }
@@ -437,6 +565,122 @@ struct SchemaView: View {
                 dropIndexField = nil
             }
             Button("Cancel", role: .cancel) { dropIndexField = nil }
+        }
+    }
+
+    private func fieldActions(_ field: FieldSchema) -> some View {
+        Menu {
+            Button("Alter Column…") { editingField = field }
+            if field.index == nil {
+                Button("Create Index…") { indexingField = field }
+            } else {
+                Button("Drop Index…", role: .destructive) { dropIndexField = field }
+            }
+            Divider()
+            Button("Drop Column…", role: .destructive) { dropField = field }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .help("Column actions")
+    }
+}
+
+private extension DataType {
+    var schemaDisplayName: String {
+        switch self {
+        case .undefined: "Undefined"
+        case .binary: "Binary"
+        case .string: "String"
+        case .bool: "Boolean"
+        case .int32: "Int32"
+        case .int64: "Int64"
+        case .uint32: "UInt32"
+        case .uint64: "UInt64"
+        case .float: "Float32"
+        case .double: "Float64"
+        case .vectorBinary32: "Binary32 vector"
+        case .vectorBinary64: "Binary64 vector"
+        case .vectorFloat16: "Float16 vector"
+        case .vectorFloat32: "Float32 vector"
+        case .vectorFloat64: "Float64 vector"
+        case .vectorInt4: "Int4 vector"
+        case .vectorInt8: "Int8 vector"
+        case .vectorInt16: "Int16 vector"
+        case .sparseVectorFloat16: "Sparse Float16 vector"
+        case .sparseVectorFloat32: "Sparse Float32 vector"
+        case .arrayBinary: "Binary array"
+        case .arrayString: "String array"
+        case .arrayBool: "Boolean array"
+        case .arrayInt32: "Int32 array"
+        case .arrayInt64: "Int64 array"
+        case .arrayUInt32: "UInt32 array"
+        case .arrayUInt64: "UInt64 array"
+        case .arrayFloat: "Float32 array"
+        case .arrayDouble: "Float64 array"
+        }
+    }
+}
+
+private extension IndexConfiguration {
+    var schemaDisplayName: String {
+        switch self {
+        case .hnsw: "HNSW"
+        case .ivf: "IVF"
+        case .flat: "Flat"
+        case .vamana: "Vamana"
+        case .inverted: "Inverted"
+        case .fullText: "Full text"
+        }
+    }
+
+    var schemaDisplayDescription: String {
+        switch self {
+        case let .hnsw(metric, quantization, m, efConstruction):
+            "HNSW · \(metric.label) · \(quantization.label) · M \(m) · efConstruction \(efConstruction)"
+        case let .ivf(metric, quantization, listCount, iterations, useSOAR):
+            "IVF · \(metric.label) · \(quantization.label) · \(listCount) lists · \(iterations) iterations\(useSOAR ? " · SOAR" : "")"
+        case let .flat(metric, quantization):
+            "Flat · \(metric.label) · \(quantization.label)"
+        case let .vamana(metric, maxDegree, buildListSize, alpha):
+            "Vamana · \(metric.label) · degree \(maxDegree) · build list \(buildListSize) · alpha \(alpha)"
+        case let .inverted(rangeOptimization, wildcard):
+            "Inverted · range \(rangeOptimization ? "on" : "off") · wildcard \(wildcard ? "on" : "off")"
+        case let .fullText(tokenizer, filters, options):
+            "Full text · \(tokenizer.label) tokenizer · \(filters.count) filter\(filters.count == 1 ? "" : "s") · \(options.count) option\(options.count == 1 ? "" : "s")"
+        }
+    }
+}
+
+private extension Metric {
+    var label: String {
+        switch self {
+        case .undefined: "Undefined"
+        case .l2: "L2"
+        case .innerProduct: "Inner product"
+        case .cosine: "Cosine"
+        case .mipsL2: "MIPS L2"
+        }
+    }
+}
+
+private extension Quantization {
+    var label: String {
+        switch self {
+        case .none: "No quantization"
+        case .float16: "Float16"
+        case .int8: "Int8"
+        case .int4: "Int4"
+        }
+    }
+}
+
+private extension FullTextTokenizer {
+    var label: String {
+        switch self {
+        case .standard: "Standard"
+        case .whitespace: "Whitespace"
+        case .jieba: "Jieba"
         }
     }
 }
