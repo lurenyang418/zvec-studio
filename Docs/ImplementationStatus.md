@@ -17,8 +17,7 @@ The implementation in this repository provides:
 
 The source and native binary are published as `zvec-swift` `v0.5.1` and
 `native-v0.5.1`, and this package uses that fixed public dependency. A formal
-direct distribution runs entirely on a fresh GitHub-hosted macOS runner. It
-imports the Developer ID certificate and App Store Connect notarization key
-from repository secrets; no self-hosted runner or preconfigured keychain is
-required. Without signing credentials, local packaging produces a strictly
-verified ad-hoc signed DMG.
+GitHub release runs entirely on a fresh GitHub-hosted macOS runner and produces
+an ad-hoc signed DMG. No Apple credentials, self-hosted runner, or preconfigured
+keychain is required. The build is not Developer ID signed or notarized, so
+macOS may require the user to explicitly approve the downloaded app.

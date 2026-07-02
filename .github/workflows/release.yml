@@ -5,6 +5,10 @@ on:
   push:
     tags: ["v*"]
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -23,6 +27,7 @@ jobs:
         working-directory: zvec-studio
         run: swift test
       - name: Determine package version
+        id: version
         working-directory: zvec-studio
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
@@ -32,44 +37,16 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-      - name: Import Developer ID certificate
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-        run: |
-          test -n "$CERTIFICATE_BASE64"
-          test -n "$CERTIFICATE_PASSWORD"
-          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/zvec-studio-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F\" '/Developer ID Application/ { print $2; exit }')"
-          test -n "$IDENTITY"
-          echo "DEVELOPER_ID_APPLICATION=$IDENTITY" >> "$GITHUB_ENV"
-      - name: Prepare notarization key
-        env:
-          PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          test -n "$PRIVATE_KEY_BASE64"
-          test -n "$KEY_ID"
-          test -n "$ISSUER_ID"
-          PRIVATE_KEY_PATH="$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
-          printf '%s' "$PRIVATE_KEY_BASE64" | base64 --decode > "$PRIVATE_KEY_PATH"
-          chmod 600 "$PRIVATE_KEY_PATH"
-          echo "NOTARY_KEY_PATH=$PRIVATE_KEY_PATH" >> "$GITHUB_ENV"
-          echo "NOTARY_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
-          echo "NOTARY_ISSUER_ID=$ISSUER_ID" >> "$GITHUB_ENV"
-      - name: Build, sign, notarize, and staple
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build and ad-hoc sign DMG
         working-directory: zvec-studio
         run: scripts/build-dmg.sh
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: zvec-studio-macos-${{ steps.version.outputs.version }}-arm64
+          path: zvec-studio/dist/ZvecStudio-${{ steps.version.outputs.version }}-arm64.dmg
+          if-no-files-found: error
       - name: Publish release asset
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: zvec-studio
@@ -82,8 +59,3 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Remove signing credentials
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/zvec-studio-signing.keychain-db" 2>/dev/null || true
-          rm -f "$RUNNER_TEMP/developer-id.p12" "${NOTARY_KEY_PATH:-}"

@@ -30,12 +30,12 @@ Formatting and release packaging also run from Terminal:
 ```sh
 xcrun swift-format lint --recursive --strict --configuration .swift-format Sources Tests Package.swift
 scripts/build-app.sh
-scripts/build-dmg.sh       # ad-hoc unless DEVELOPER_ID_APPLICATION is set
+scripts/build-dmg.sh       # ad-hoc signed DMG
 ```
 
 The package pins the public `zvec-swift` dependency to `v0.5.1`. Its binary XCFramework is downloaded from the matching `native-v0.5.1` GitHub Release. See [Packaging](Docs/Packaging.md).
 
-Zvec Studio is distributed independently as a Developer ID-signed and notarized DMG. It is not an App Store application and intentionally does not enable App Sandbox, because users explicitly open and manage collections at arbitrary filesystem locations. See [Implementation Status](Docs/ImplementationStatus.md).
+Zvec Studio is distributed independently as an ad-hoc signed GitHub Release DMG. It is not Developer ID signed, notarized, or distributed through the App Store, and intentionally does not enable App Sandbox because users explicitly open and manage collections at arbitrary filesystem locations. macOS may require explicit approval before opening a downloaded build. See [Implementation Status](Docs/ImplementationStatus.md).
 
 ## Contributing
 
