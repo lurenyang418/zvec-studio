@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ZvecStudio",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "ZvecStudioCore", targets: ["ZvecStudioCore"]),
@@ -19,7 +20,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "ZvecStudio",
-            dependencies: ["ZvecStudioCore", .product(name: "Zvec", package: "zvec-swift")]
+            dependencies: ["ZvecStudioCore", .product(name: "Zvec", package: "zvec-swift")],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "ZvecStudioCoreTests",

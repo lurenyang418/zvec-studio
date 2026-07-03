@@ -7,10 +7,12 @@ import ZvecStudioCore
 struct ZvecStudioApp: App {
     @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var applicationDelegate
     @State private var model = StudioModel()
+    @AppStorage(AppLanguage.defaultsKey) private var appLanguage = AppLanguage.system
 
     var body: some Scene {
         Window("Zvec Studio", id: "main") {
             ContentView(model: model)
+                .environment(\.locale, appLanguage.locale)
                 .frame(minWidth: 960, minHeight: 640)
                 .task {
                     applicationDelegate.shutdownHandler = { await model.shutdownForTermination() }
@@ -21,6 +23,7 @@ struct ZvecStudioApp: App {
 
         Settings {
             SettingsView(model: model)
+                .environment(\.locale, appLanguage.locale)
         }
     }
 }
@@ -75,6 +78,11 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingCreate) {
             CreateCollectionView(model: model, isPresented: $showingCreate)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                AppLanguageMenu()
+            }
         }
         .onChange(of: model.destination) { _, destination in
             switch destination {

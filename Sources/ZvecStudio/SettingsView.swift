@@ -4,7 +4,10 @@ import Zvec
 import ZvecStudioCore
 
 struct SettingsView: View {
+    private let contentWidth: CGFloat = 680
+
     @Bindable var model: StudioModel
+    @AppStorage(AppLanguage.defaultsKey) private var appLanguage = AppLanguage.system
     @State private var memoryLimitMB = ""
     @State private var queryThreads = ""
     @State private var optimizeThreads = ""
@@ -27,89 +30,200 @@ struct SettingsView: View {
         _logLevel = State(initialValue: profile.logLevelRawValue.flatMap(LogLevel.init(rawValue:)) ?? .warning)
         _invertedRatio = State(initialValue: profile.invertedToForwardScanRatio.map { String($0) } ?? "")
         _bruteForceRatio = State(initialValue: profile.bruteForceByKeysRatio.map { String($0) } ?? "")
-        _fullTextBruteForceRatio = State(initialValue: profile.fullTextBruteForceByKeysRatio.map { String($0) } ?? "")
+        _fullTextBruteForceRatio = State(
+            initialValue: profile.fullTextBruteForceByKeysRatio.map { String($0) } ?? ""
+        )
         _jiebaPath = State(initialValue: profile.jiebaDictionaryPath ?? "")
     }
 
     var body: some View {
-        Form {
-            Section("Runtime") {
-                TextField("Memory limit (MB, optional)", text: $memoryLimitMB)
-                TextField("Query threads (optional)", text: $queryThreads)
-                TextField("Optimize threads (optional)", text: $optimizeThreads)
-                Toggle("Console logging", isOn: $loggingEnabled)
-                if loggingEnabled {
-                    Picker("Log level", selection: $logLevel) {
-                        ForEach(LogLevel.allCases, id: \.rawValue) {
-                            Text(String(describing: $0)).tag($0)
+        runtimePane
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(minWidth: 760, minHeight: 560)
+            .onChange(of: memoryLimitMB) { model.markRuntimeNeedsRestart() }
+            .onChange(of: queryThreads) { model.markRuntimeNeedsRestart() }
+            .onChange(of: optimizeThreads) { model.markRuntimeNeedsRestart() }
+            .onChange(of: logLevel) { model.markRuntimeNeedsRestart() }
+            .onChange(of: loggingEnabled) { model.markRuntimeNeedsRestart() }
+            .onChange(of: invertedRatio) { model.markRuntimeNeedsRestart() }
+            .onChange(of: bruteForceRatio) { model.markRuntimeNeedsRestart() }
+            .onChange(of: fullTextBruteForceRatio) { model.markRuntimeNeedsRestart() }
+            .onChange(of: jiebaPath) { model.markRuntimeNeedsRestart() }
+            .confirmationDialog(shutdownPrompt, isPresented: $confirmingShutdown, titleVisibility: .visible) {
+                Button("Close All and Shutdown", role: .destructive) {
+                    Task { await model.shutdownRuntime() }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+    }
+
+    private var runtimePane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            paneTitle("Runtime", subtitle: "Configure memory, concurrency, logging, and search behavior.")
+                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    settingsGroup("Resources") {
+                        settingField("Memory limit", hint: "MB · Optional", text: $memoryLimitMB)
+                        settingField("Query threads", hint: "Optional", text: $queryThreads)
+                        settingField("Optimize threads", hint: "Optional", text: $optimizeThreads)
+                    }
+
+                    settingsGroup("Logging") {
+                        Toggle("Enable console logging", isOn: $loggingEnabled)
+                        if loggingEnabled {
+                            HStack(spacing: 12) {
+                                Text("Log level")
+                                    .frame(width: 250, alignment: .leading)
+                                Picker("Log level", selection: $logLevel) {
+                                    ForEach(LogLevel.allCases, id: \.rawValue) {
+                                        Text(String(describing: $0)).tag($0)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 180)
+                                Spacer()
+                            }
+                        }
+                    }
+
+                    settingsGroup("Search thresholds") {
+                        settingField("Inverted-to-forward scan ratio", hint: "0–1 · Optional", text: $invertedRatio)
+                        settingField("Brute-force by keys ratio", hint: "0–1 · Optional", text: $bruteForceRatio)
+                        settingField(
+                            "Full-text brute-force by keys ratio", hint: "0–1 · Optional",
+                            text: $fullTextBruteForceRatio
+                        )
+                    }
+
+                    settingsGroup("Chinese tokenizer") {
+                        HStack(spacing: 12) {
+                            Text("Jieba dictionary")
+                                .frame(width: 250, alignment: .leading)
+                            Group {
+                                if jiebaPath.isEmpty { Text("Bundled default") } else { Text(jiebaPath) }
+                            }
+                            .foregroundStyle(jiebaPath.isEmpty ? .secondary : .primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            Button("Choose…", action: chooseJieba)
+                            if !jiebaPath.isEmpty { Button("Clear") { jiebaPath = "" } }
+                            Spacer()
                         }
                     }
                 }
-                TextField("Inverted-to-forward scan ratio (optional)", text: $invertedRatio)
-                TextField("Brute-force by keys ratio (optional)", text: $bruteForceRatio)
-                TextField("Full-text brute-force by keys ratio (optional)", text: $fullTextBruteForceRatio)
-                LabeledContent("Jieba dictionary") {
-                    HStack {
-                        Text(jiebaPath.isEmpty ? "Bundled default" : jiebaPath).lineLimit(1)
-                        Button("Choose…", action: chooseJieba)
-                        if !jiebaPath.isEmpty { Button("Clear") { jiebaPath = "" } }
+                .frame(width: contentWidth)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+            }
+
+            Divider()
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    if model.runtimeNeedsRestart {
+                        Label("Unsaved runtime changes", systemImage: "arrow.clockwise.circle")
+                            .foregroundStyle(.orange)
                     }
+                    Text("Restarting closes open collections; recent collections remain available.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }
-            Text("Runtime changes close all open collections when applied. Recent collections remain available.")
-                .font(.caption).foregroundStyle(.secondary)
-            if model.runtimeNeedsRestart {
-                Label("Runtime restart required", systemImage: "arrow.clockwise.circle")
-                    .foregroundStyle(.orange)
-            }
-            if let validationMessage { Text(validationMessage).foregroundStyle(.red) }
-            HStack {
-                Button("Shutdown Runtime", role: .destructive) { confirmingShutdown = true }
-                    .disabled(!model.runtimeReady)
                 Spacer()
-                Button("Restart Runtime", action: restart)
+                Button("Shut Down…", role: .destructive) { confirmingShutdown = true }
                     .disabled(!model.runtimeReady)
+                Button("Apply and Restart", action: restart)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!model.runtimeReady || !model.runtimeNeedsRestart)
+            }
+            .frame(width: contentWidth)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            if let validationMessage {
+                Text(validationMessage).font(.caption).foregroundStyle(.red)
+                    .frame(width: contentWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 28)
             }
         }
-        .padding()
-        .frame(width: 620, height: 600)
-        .onChange(of: memoryLimitMB) { model.markRuntimeNeedsRestart() }
-        .onChange(of: queryThreads) { model.markRuntimeNeedsRestart() }
-        .onChange(of: optimizeThreads) { model.markRuntimeNeedsRestart() }
-        .onChange(of: logLevel) { model.markRuntimeNeedsRestart() }
-        .onChange(of: loggingEnabled) { model.markRuntimeNeedsRestart() }
-        .onChange(of: invertedRatio) { model.markRuntimeNeedsRestart() }
-        .onChange(of: bruteForceRatio) { model.markRuntimeNeedsRestart() }
-        .onChange(of: fullTextBruteForceRatio) { model.markRuntimeNeedsRestart() }
-        .onChange(of: jiebaPath) { model.markRuntimeNeedsRestart() }
-        .confirmationDialog(
-            model.opened.isEmpty
-                ? "Shutdown the Zvec runtime?"
-                : "Shutdown requires closing \(model.opened.count) open collection(s). Continue?",
-            isPresented: $confirmingShutdown,
-            titleVisibility: .visible
-        ) {
-            Button("Close All and Shutdown", role: .destructive) {
-                Task { await model.shutdownRuntime() }
-            }
-            Button("Cancel", role: .cancel) {}
+        .padding(.bottom, 28)
+    }
+
+    private func paneTitle(_ title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.title2).bold()
+            Text(subtitle).foregroundStyle(.secondary)
         }
+    }
+
+    private func settingsGroup<Content: View>(
+        _ title: LocalizedStringKey, @ViewBuilder content: () -> Content
+    ) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+        } label: {
+            Text(title).font(.headline)
+        }
+        .frame(width: contentWidth, alignment: .leading)
+    }
+
+    private func settingField(
+        _ title: LocalizedStringKey, hint: LocalizedStringKey, text: Binding<String>
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .frame(width: 250, alignment: .leading)
+            TextField("", text: text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 180)
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 105, alignment: .leading)
+            Spacer()
+        }
+    }
+
+    private var shutdownPrompt: String {
+        if model.opened.isEmpty {
+            return String(localized: "Shutdown the Zvec runtime?", locale: appLanguage.locale)
+        }
+        return String(
+            localized: "Shutdown requires closing \(model.opened.count) open collection(s). Continue?",
+            locale: appLanguage.locale
+        )
     }
 
     private func restart() {
         do {
-            let memoryMB = try optionalUInt64(memoryLimitMB, name: "Memory limit")
-            let query = try optionalUInt32(queryThreads, name: "Query threads")
-            let optimize = try optionalUInt32(optimizeThreads, name: "Optimize threads")
+            let memoryMB = try optionalUInt64(
+                memoryLimitMB, name: String(localized: "Memory limit", locale: appLanguage.locale)
+            )
+            let query = try optionalUInt32(
+                queryThreads, name: String(localized: "Query threads", locale: appLanguage.locale)
+            )
+            let optimize = try optionalUInt32(
+                optimizeThreads, name: String(localized: "Optimize threads", locale: appLanguage.locale)
+            )
             let profile = RuntimeConfigurationProfile(
                 memoryLimitBytes: try memoryMB.map { try multiplied($0, by: 1_048_576) },
                 logLevel: loggingEnabled ? logLevel : nil,
                 queryThreadCount: query,
                 optimizeThreadCount: optimize,
-                invertedToForwardScanRatio: try optionalRatio(invertedRatio, name: "Inverted scan ratio"),
-                bruteForceByKeysRatio: try optionalRatio(bruteForceRatio, name: "Brute-force ratio"),
+                invertedToForwardScanRatio: try optionalRatio(
+                    invertedRatio, name: String(localized: "Inverted scan ratio", locale: appLanguage.locale)
+                ),
+                bruteForceByKeysRatio: try optionalRatio(
+                    bruteForceRatio, name: String(localized: "Brute-force ratio", locale: appLanguage.locale)
+                ),
                 fullTextBruteForceByKeysRatio: try optionalRatio(
-                    fullTextBruteForceRatio, name: "Full-text brute-force ratio"
+                    fullTextBruteForceRatio,
+                    name: String(localized: "Full-text brute-force ratio", locale: appLanguage.locale)
                 ),
                 jiebaDictionaryPath: jiebaPath.isEmpty ? nil : jiebaPath
             )
@@ -120,25 +234,35 @@ struct SettingsView: View {
 
     private func optionalUInt64(_ text: String, name: String) throws -> UInt64? {
         guard !text.isEmpty else { return nil }
-        guard let value = UInt64(text), value > 0 else { throw SettingsError.invalid(name) }
+        guard let value = UInt64(text), value > 0 else {
+            throw SettingsError.invalid(name, locale: appLanguage.locale)
+        }
         return value
     }
 
     private func optionalUInt32(_ text: String, name: String) throws -> UInt32? {
         guard let value = try optionalUInt64(text, name: name) else { return nil }
-        guard let result = UInt32(exactly: value) else { throw SettingsError.invalid(name) }
+        guard let result = UInt32(exactly: value) else {
+            throw SettingsError.invalid(name, locale: appLanguage.locale)
+        }
         return result
     }
 
     private func multiplied(_ value: UInt64, by multiplier: UInt64) throws -> UInt64 {
         let result = value.multipliedReportingOverflow(by: multiplier)
-        guard !result.overflow else { throw SettingsError.invalid("Memory limit") }
+        guard !result.overflow else {
+            throw SettingsError.invalid(
+                String(localized: "Memory limit", locale: appLanguage.locale), locale: appLanguage.locale
+            )
+        }
         return result.partialValue
     }
 
     private func optionalRatio(_ text: String, name: String) throws -> Float? {
         guard !text.isEmpty else { return nil }
-        guard let value = Float(text), value >= 0, value <= 1 else { throw SettingsError.invalid(name) }
+        guard let value = Float(text), value >= 0, value <= 1 else {
+            throw SettingsError.invalidRatio(name, locale: appLanguage.locale)
+        }
         return value
     }
 
@@ -152,10 +276,23 @@ struct SettingsView: View {
 }
 
 private enum SettingsError: Error, CustomStringConvertible {
-    case invalid(String)
+    case invalid(String, locale: Locale)
+    case invalidRatio(String, locale: Locale)
+
     var description: String {
         switch self {
-        case let .invalid(name): "\(name) must be a positive whole number in range"
+        case let .invalid(name, locale):
+            String(
+                format: String(
+                    localized: "%@ must be a positive whole number in range", locale: locale
+                ),
+                name
+            )
+        case let .invalidRatio(name, locale):
+            String(
+                format: String(localized: "%@ must be a number from 0 to 1", locale: locale),
+                name
+            )
         }
     }
 }
